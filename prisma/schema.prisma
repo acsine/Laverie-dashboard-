@@ -1,0 +1,409 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// Configuration globale (essai / remote_version)
+model AppConfig {
+  id                     String   @id @default("default")
+  trialEndAt             DateTime @map("trial_end_at") @db.Timestamptz(6)
+  trialDurationMonths    Int      @default(1) @map("trial_duration_months")
+  extensionRequested     Boolean  @default(false) @map("extension_requested")
+  extensionApproved      Boolean  @default(false) @map("extension_approved")
+  extensionMonths        Int      @default(1) @map("extension_months")
+  remoteVersion          BigInt   @default(0) @map("remote_version")
+  updatedAt              DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("app_config")
+}
+
+model LavSite {
+  id        String   @id
+  nom       String
+  adresse   String   @default("")
+  ville     String   @default("")
+  pays      String   @default("Cameroun")
+  telephone String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  config LavSiteConfig?
+
+  @@map("lav_site")
+}
+
+model LavSiteConfig {
+  lavSiteId           String   @id @map("lav_site_id")
+  trialEndAt          DateTime @map("trial_end_at") @db.Timestamptz(6)
+  trialDurationMonths Int      @default(1) @map("trial_duration_months")
+  remoteVersion       BigInt   @default(0) @map("remote_version")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  site LavSite @relation(fields: [lavSiteId], references: [id], onDelete: Cascade)
+
+  @@map("lav_site_config")
+}
+
+model LavPlatformUser {
+  id           String    @id
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  firstName    String    @map("first_name")
+  lastName     String    @map("last_name")
+  phone        String?
+  isActive     Boolean   @default(true) @map("is_active")
+  /// null = jamais changé (premier login forcé)
+  mustChangePassword Boolean @default(true) @map("must_change_password")
+  totpSecret   String?   @map("totp_secret")
+  totpEnabled  Boolean   @default(false) @map("totp_enabled")
+  canApproveTrial Boolean @default(false) @map("can_approve_trial")
+  isSuperAdmin Boolean   @default(false) @map("is_super_admin")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(6)
+
+  sessions LavSession[]
+
+  @@map("lav_platform_user")
+}
+
+model LavAuditLog {
+  id         String   @id
+  actorId    String   @map("actor_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  lavSiteId  String?  @map("lav_site_id")
+  payload    Json?
+  before     Json?
+  after      Json?
+  ip         String?
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([actorId])
+  @@index([lavSiteId])
+  @@index([createdAt])
+  @@map("lav_audit_log")
+}
+
+model LavSession {
+  id               String    @id @default(cuid())
+  userId           String    @map("user_id")
+  refreshTokenHash String    @map("refresh_token_hash")
+  deviceLabel      String?   @map("device_label")
+  ip               String?
+  userAgent        String?   @map("user_agent")
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user LavPlatformUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("lav_session")
+}
+
+model LavLoginAttempt {
+  id         String   @id @default(cuid())
+  email      String
+  success    Boolean
+  ip         String?
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([email, createdAt])
+  @@map("lav_login_attempt")
+}
+
+model SyncMetadata {
+  id             String    @id @default("default")
+  lastFullSyncAt DateTime? @map("last_full_sync_at") @db.Timestamptz(6)
+  configHash     String?   @map("config_hash")
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("sync_metadata")
+}
+
+model SyncPendingBatch {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  createdByEmployeeId  String    @map("created_by_employee_id")
+  createdByEmail       String?   @map("created_by_email")
+  role                 String
+  status               String    @default("pending")
+  payload              Json
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  reviewedAt           DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  reviewedBy           String?   @map("reviewed_by")
+
+  @@index([status])
+  @@map("sync_pending_batches")
+}
+
+model Employee {
+  id                 String    @id
+  lavSiteId          String?   @map("lav_site_id")
+  firstName          String    @map("first_name")
+  lastName           String    @map("last_name")
+  phone              String
+  email              String?   @unique
+  passwordHash       String?   @map("password_hash")
+  photo              String?
+  role               String
+  contractType       String    @map("contract_type")
+  hireDate           DateTime  @map("hire_date") @db.Timestamptz(6)
+  ratePerVehicleType Json?     @map("rate_per_vehicle_type")
+  monthlySalary      Float?    @map("monthly_salary")
+  paymentDay         Int?      @map("payment_day")
+  isActive           Boolean   @default(true) @map("is_active")
+  createdAt          DateTime? @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime? @map("updated_at") @db.Timestamptz(6)
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([lavSiteId])
+  @@map("employees")
+}
+
+model Customer {
+  id           String    @id
+  lavSiteId    String?   @map("lav_site_id")
+  firstName    String    @map("first_name")
+  lastName     String    @map("last_name")
+  phone        String
+  email        String?
+  address      String?
+  matricule    String?
+  marque       String?
+  clientNumber String?   @map("client_number")
+  country      String?
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime? @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([lavSiteId])
+  @@map("customers")
+}
+
+model VehicleCategory {
+  id          String    @id
+  lavSiteId   String?   @map("lav_site_id")
+  name        String
+  description String?
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime? @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@map("vehicle_categories")
+}
+
+model VehicleType {
+  id          String    @id
+  lavSiteId   String?   @map("lav_site_id")
+  name        String
+  categoryId  String    @map("category_id")
+  description String?
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime? @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@map("vehicle_types")
+}
+
+model Vehicle {
+  id            String    @id
+  lavSiteId     String?   @map("lav_site_id")
+  customerId    String    @map("customer_id")
+  matricule     String
+  marque        String?
+  vehicleTypeId String    @map("vehicle_type_id")
+  photo         String?
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime? @map("updated_at") @db.Timestamptz(6)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@map("vehicles")
+}
+
+model ServiceCategory {
+  id          String    @id
+  lavSiteId   String?   @map("lav_site_id")
+  name        String
+  description String?
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime? @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@map("service_categories")
+}
+
+model Service {
+  id                        String    @id
+  lavSiteId                 String?   @map("lav_site_id")
+  name                      String
+  description               String
+  type                      String
+  estimatedDurationMinutes  Int       @map("estimated_duration_minutes")
+  isActive                  Boolean   @default(true) @map("is_active")
+  createdAt                 DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime? @map("updated_at") @db.Timestamptz(6)
+  deletedAt                 DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@map("services")
+}
+
+model Pricing {
+  id                       String    @id
+  lavSiteId                String?   @map("lav_site_id")
+  vehicleTypeId            String    @map("vehicle_type_id")
+  serviceId                String    @map("service_id")
+  price                    Float
+  estimatedDurationMinutes Int?      @map("estimated_duration_minutes")
+  validFrom                DateTime  @map("valid_from") @db.Timestamptz(6)
+  validUntil               DateTime? @map("valid_until") @db.Timestamptz(6)
+  isActive                 Boolean   @default(true) @map("is_active")
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime? @map("updated_at") @db.Timestamptz(6)
+  deletedAt                DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@map("pricing")
+}
+
+model Order {
+  id                       String    @id
+  lavSiteId                String?   @map("lav_site_id")
+  customerId               String    @map("customer_id")
+  vehicleId                String?   @map("vehicle_id")
+  vehicleTypeId            String    @map("vehicle_type_id")
+  serviceIds               String    @map("service_ids")
+  assignedEmployeeId       String?   @map("assigned_employee_id")
+  status                   String
+  totalAmount              Float     @map("total_amount")
+  discount                 Float?
+  paymentMethod            String    @map("payment_method")
+  promotionId              String?   @map("promotion_id")
+  estimatedDurationMinutes Int?      @map("estimated_duration_minutes")
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime? @map("updated_at") @db.Timestamptz(6)
+  createdBy                String?   @map("created_by")
+  updatedBy                String?   @map("updated_by")
+  startedAt                DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt              DateTime? @map("completed_at") @db.Timestamptz(6)
+  pickedUpAt               DateTime? @map("picked_up_at") @db.Timestamptz(6)
+  notes                    String?
+  invoiceNumber            String?   @map("invoice_number")
+  pickupCode               String?   @map("pickup_code")
+  lavFideliteCarteId       String?   @map("lav_fidelite_carte_id")
+  lavFideliteTier          String?   @map("lav_fidelite_tier")
+  isFideliteGratuit        Boolean   @default(false) @map("is_fidelite_gratuit")
+  deletedAt                DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([lavSiteId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model Revenue {
+  id            String    @id
+  lavSiteId     String?   @map("lav_site_id")
+  orderId       String    @map("order_id")
+  amount        Float
+  paymentMethod String    @map("payment_method")
+  date          DateTime  @db.Timestamptz(6)
+  customerId    String?   @map("customer_id")
+  notes         String?
+  description   String?
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@map("revenues")
+}
+
+model Expense {
+  id               String    @id
+  lavSiteId        String?   @map("lav_site_id")
+  title            String
+  description      String?
+  category         String
+  amount           Float
+  date             DateTime  @db.Timestamptz(6)
+  receiptPhotoPath String?   @map("receipt_photo_path")
+  isApproved       Boolean   @default(false) @map("is_approved")
+  approvedBy       String?   @map("approved_by")
+  approvedAt       DateTime? @map("approved_at") @db.Timestamptz(6)
+  createdBy        String    @map("created_by")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime? @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@map("expenses")
+}
+
+model LavFideliteProgramme {
+  id              String    @id
+  tier            String
+  libelle         String
+  lavagesParMois  Int       @map("lavages_par_mois")
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime? @map("updated_at") @db.Timestamptz(6)
+
+  cartes LavFideliteCarte[]
+
+  @@map("lav_fidelite_programme")
+}
+
+model LavFideliteSequence {
+  id        String @id @default("default")
+  lastValue BigInt @default(0) @map("last_value")
+
+  @@map("lav_fidelite_sequence")
+}
+
+model LavFideliteCarte {
+  id           String    @id
+  programmeId  String    @map("programme_id")
+  detenteurNom String    @map("detenteur_nom")
+  numeroSerie  String    @unique @map("numero_serie")
+  codeBarre    String    @map("code_barre")
+  qrPayload    String    @map("qr_payload")
+  issuedAt     DateTime  @map("issued_at") @db.Timestamptz(6)
+  validUntil   DateTime? @map("valid_until") @db.Timestamptz(6)
+  statut       String
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  programme LavFideliteProgramme @relation(fields: [programmeId], references: [id])
+
+  @@map("lav_fidelite_carte")
+}
+
+model LavFideliteQuotaMois {
+  carteId      String @map("carte_id")
+  anneeMois    String @map("annee_mois")
+  utilisations Int    @default(0)
+
+  @@id([carteId, anneeMois])
+  @@map("lav_fidelite_quota_mois")
+}
+
+model LavFideliteConsommation {
+  id        String   @id
+  carteId   String   @map("carte_id")
+  lavSiteId String   @map("lav_site_id")
+  orderId   String?  @map("order_id")
+  anneeMois String   @map("annee_mois")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("lav_fidelite_consommation")
+}
