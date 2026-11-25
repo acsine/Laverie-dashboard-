@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { appError, type AppError } from "@/lib/errors";
+import { INVALID_CREDENTIALS_PUBLIC, userFacingMessage } from "@/lib/user-facing-errors";
 import { loginSchema, totpSchema, changePasswordSchema } from "@/lib/validations/auth";
 import { hasDatabaseUrl } from "@/lib/supabase";
 import { cloudPlatformLogin } from "@/server/cloud/sync-api";
@@ -67,13 +68,16 @@ async function loginViaPrisma(email: string, password: string): Promise<AuthResu
     const { ok, needsRehash } = await verifyPassword(password, user.passwordHash);
     if (!ok) {
       await recordAttempt(email, false);
-      const hint =
+      const devHint =
         email === "superadmin@laverie.com"
           ? "Super admin : utilisez le mot de passe admin123, ou réexécutez scripts/seed-superadmin.sql dans Supabase."
-          : "E-mail ou mot de passe incorrect.";
+          : INVALID_CREDENTIALS_PUBLIC;
       return {
         ok: false,
-        error: appError("INVALID_CREDENTIALS", hint),
+        error: appError(
+          "INVALID_CREDENTIALS",
+          userFacingMessage(devHint, INVALID_CREDENTIALS_PUBLIC),
+        ),
       };
     }
 
@@ -141,13 +145,16 @@ export async function loginAction(raw: unknown): Promise<AuthResult> {
     const cloud = await cloudPlatformLogin(email, password);
     if (!cloud.ok) {
       await recordAttempt(email, false);
-      const message =
+      const devHint =
         cloud.platformRejected && email === "superadmin@laverie.com"
           ? "Super admin : mot de passe incorrect ou compte hors seed par défaut. Essayez admin123, ou admin@laverie.com / admin123. Pour les actions cloud (fidélité plateforme), exécutez scripts/seed-superadmin.sql dans Supabase."
-          : "E-mail ou mot de passe incorrect.";
+          : INVALID_CREDENTIALS_PUBLIC;
       return {
         ok: false,
-        error: appError("INVALID_CREDENTIALS", message),
+        error: appError(
+          "INVALID_CREDENTIALS",
+          userFacingMessage(devHint, INVALID_CREDENTIALS_PUBLIC),
+        ),
       };
     }
     const cloudUser = cloud.user;

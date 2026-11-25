@@ -4,6 +4,7 @@ import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { appError, type AppError } from "@/lib/errors";
+import { PLATFORM_ACTION_DENIED_PUBLIC, userFacingMessage } from "@/lib/user-facing-errors";
 import { isSuperAdmin } from "@/lib/session-policy";
 import { getSession } from "@/server/auth/session";
 import { getEdgeCredentials } from "@/server/auth/edge-credentials";
@@ -160,15 +161,19 @@ async function issueFidelityCardActionImpl(
     });
 
     if (platformIssue.status !== 200 || platformIssue.data.ok !== true) {
-      const hint =
+      const base = String(platformIssue.data.error ?? "Non autorisé (plateforme)");
+      const devHint =
         platformIssue.status === 401
-          ? " Compte plateforme requis : exécutez scripts/seed-superadmin.sql puis connectez superadmin@laverie.com."
-          : "";
+          ? `${base}. Compte plateforme requis : exécutez scripts/seed-superadmin.sql puis connectez superadmin@laverie.com.`
+          : base;
       return {
         ok: false,
         error: appError(
           "ISSUE_FAILED",
-          `${String(platformIssue.data.error ?? "Non autorisé (plateforme)")}.${hint}`,
+          userFacingMessage(
+            devHint,
+            platformIssue.status === 401 ? PLATFORM_ACTION_DENIED_PUBLIC : "Émission de carte impossible.",
+          ),
         ),
       };
     }

@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import { catalogRowMatchesSite, isCatalogEntityKey } from "@/lib/catalogue-scope";
 import { appError, type AppError } from "@/lib/errors";
+import { userFacingMessage } from "@/lib/user-facing-errors";
 import { getEdgeCredentials } from "@/server/auth/edge-credentials";
 import { invokeSyncApi } from "./sync-api";
 
@@ -150,10 +151,18 @@ export async function pushCloudChanges(changes: SyncChange[]): Promise<void> {
     const raw = String(res.data.error ?? "");
     if (raw === "Non autorise") {
       throw new Error(
-        "Cloud refuse l’écriture super admin : redéployez sync-api (correctif sync-push-direct) puis reconnectez-vous. Si le mot de passe a changé, utilisez le mot de passe actuel à la connexion.",
+        userFacingMessage(
+          "Cloud refuse l’écriture super admin : redéployez sync-api (correctif sync-push-direct) puis reconnectez-vous. Si le mot de passe a changé, utilisez le mot de passe actuel à la connexion.",
+          "Synchronisation refusée. Reconnectez-vous avec un compte autorisé.",
+        ),
       );
     }
-    throw new Error(raw || "Synchronisation refusée (rôle admin requis).");
+    throw new Error(
+      userFacingMessage(
+        raw || "Synchronisation refusée (rôle admin requis).",
+        "Synchronisation refusée. Reconnectez-vous avec un compte autorisé.",
+      ),
+    );
   }
 }
 

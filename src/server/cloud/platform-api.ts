@@ -1,4 +1,5 @@
 import { appError, type AppError } from "@/lib/errors";
+import { PLATFORM_ACTION_DENIED_PUBLIC, userFacingMessage } from "@/lib/user-facing-errors";
 import { getSupabase } from "@/lib/supabase";
 import { getEdgeCredentials } from "@/server/auth/edge-credentials";
 import { invokeSyncApi } from "./sync-api";
@@ -26,16 +27,26 @@ function platformErrorMessage(code: string, status: number, raw: string): AppErr
   if (status === 401 && raw === "Non autorise") {
     return appError(
       code,
-      "Edge sync-api introuvable ou trop ancienne (action plateforme absente). Redéployez supabase/functions/sync-api depuis gestion-manager.",
+      userFacingMessage(
+        "Edge sync-api introuvable ou trop ancienne (action plateforme absente). Redéployez supabase/functions/sync-api depuis gestion-manager.",
+        PLATFORM_ACTION_DENIED_PUBLIC,
+      ),
     );
   }
   if (status === 401 && raw.toLowerCase().includes("plateforme")) {
     return appError(
       code,
-      "Compte plateforme refusé. Exécutez scripts/seed-superadmin.sql dans Supabase, puis reconnectez-vous (superadmin@laverie.com / admin123).",
+      userFacingMessage(
+        "Compte plateforme refusé. Exécutez scripts/seed-superadmin.sql dans Supabase, puis reconnectez-vous (superadmin@laverie.com / admin123).",
+        PLATFORM_ACTION_DENIED_PUBLIC,
+      ),
     );
   }
-  return appError(code, raw || "Opération plateforme refusée");
+  const generic = userFacingMessage(
+    raw || "Opération plateforme refusée",
+    "Opération impossible pour le moment.",
+  );
+  return appError(code, generic);
 }
 
 async function siteUpsertViaRest(site: Record<string, unknown>): Promise<boolean> {

@@ -1,6 +1,7 @@
 "use server";
 
 import { appError, type AppError } from "@/lib/errors";
+import { userFacingMessage } from "@/lib/user-facing-errors";
 import { hashPasswordEdge } from "@/server/cloud/entity-sync";
 import { invokeSyncApi } from "@/server/cloud/sync-api";
 import { setEdgeCredentials } from "./edge-credentials";
@@ -49,7 +50,10 @@ export async function changePasswordCloud(
       ok: false,
       error: appError(
         "NOT_SUPPORTED",
-        "Déployez la fonction Edge sync-api (action account-change-password) sur Supabase.",
+        userFacingMessage(
+          "Déployez la fonction Edge sync-api (action account-change-password) sur Supabase.",
+          "Changement de mot de passe indisponible pour ce compte.",
+        ),
       ),
     };
   }
