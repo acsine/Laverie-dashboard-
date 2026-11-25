@@ -28,8 +28,11 @@ import type { Column, TabItem } from "@/components/ui";
 import type { CatalogRow } from "@/server/catalogue/map-catalogue";
 import { catalogDeleteConfirmDescription } from "@/server/catalogue/delete-guards";
 import { deleteCatalogItemAction, saveCatalogItemAction } from "@/server/catalogue/actions";
-import type { EntityKey } from "@/server/cloud/entity-sync";
 import { useConfirm } from "@/hooks/use-confirm";
+import {
+  buildCatalogSavePayload,
+  catalogOptionsForScope,
+} from "@/features/catalogue/lib/build-catalog-payload";
 
 type Props = {
   serviceCategories: CatalogRow[];
@@ -101,9 +104,6 @@ export function CataloguePage({
     [],
   );
 
-  const kind = catalogKindFromTab(tab);
-  const entityType = (): EntityKey => CATALOG_KINDS[kind].entityKey;
-
   const rowsForTab = (): CatalogRow[] => {
     if (tab === "svc-cat") return serviceCategories;
     if (tab === "veh-cat") return vehicleCategories;
@@ -128,6 +128,30 @@ export function CataloguePage({
   }, [tab, search, serviceCategories, services, vehicleCategories, vehicleTypes, pricing]);
 
   const emptyCopy = listSearchEmptyCopy(search, "Aucun élément");
+
+  const scopedServiceOptions = useMemo(
+    () => catalogOptionsForScope(services, formScope, isPlatform),
+    [services, formScope, isPlatform],
+  );
+  const scopedVehicleTypeOptions = useMemo(
+    () => catalogOptionsForScope(vehicleTypes, formScope, isPlatform),
+    [vehicleTypes, formScope, isPlatform],
+  );
+
+  useEffect(() => {
+    if (!open || tab !== "pricing") return;
+    setForm((f) => {
+      const sidOk = !f.serviceId || scopedServiceOptions.some((o) => o.value === f.serviceId);
+      const vtOk =
+        !f.vehicleTypeId || scopedVehicleTypeOptions.some((o) => o.value === f.vehicleTypeId);
+      if (sidOk && vtOk) return f;
+      return {
+        ...f,
+        serviceId: sidOk ? f.serviceId : "",
+        vehicleTypeId: vtOk ? f.vehicleTypeId : "",
+      };
+    });
+  }, [open, tab, formScope, scopedServiceOptions, scopedVehicleTypeOptions]);
 
   function detailHref(row: CatalogRow) {
     return catalogDetailHref(row.kind, row.id, siteId);
@@ -351,21 +375,19 @@ export function CataloguePage({
               toast("Choisissez une portée (universel ou site)", "danger");
               return;
             }
+            const built = buildCatalogSavePayload(tab, form, {
+              editingId: editing?.id,
+              editingCreatedAt: editing?.createdAt,
+              formScope,
+              siteId,
+              isPlatform,
+            });
+            if (!built.payload) {
+              toast(built.clientError ?? "Formulaire incomplet.", "danger");
+              return;
+            }
             startTransition(async () => {
-              const res = await saveCatalogItemAction({
-                id: editing?.id,
-                createdAt: editing?.createdAt,
-                entityType: entityType(),
-                name: form.name,
-                description: form.description,
-                categoryId: form.categoryId || undefined,
-                serviceCategoryId: form.serviceCategoryId || undefined,
-                serviceId: form.serviceId || undefined,
-                vehicleTypeId: form.vehicleTypeId || undefined,
-                price: form.price ? Number(form.price) : undefined,
-                isActive: form.isActive,
-                lavSiteId: isPlatform ? formScope : siteId ?? undefined,
-              });
+              const res = await saveCatalogItemAction(built.payload);
               if (!res.ok) {
                 toast(res.error.message, "danger");
                 return;
@@ -431,18 +453,35 @@ export function CataloguePage({
           )}
           {isPricing && (
             <>
+              <p className="text-sm text-muted">
+                Un tarif lie un <strong className="text-ink">service</strong> et un{" "}
+                <strong className="text-ink">type de véhicule</strong> (pas une catégorie). Les
+                listes suivent la portée choisie ci-dessus.
+              </p>
               <Select
                 label="Service"
                 value={form.serviceId}
                 onChange={(v) => setForm({ ...form, serviceId: v })}
-                options={serviceOptions}
+                options={[
+                  { value: "", label: "— Choisir un service —" },
+                  ...scopedServiceOptions,
+                ]}
               />
               <Select
                 label="Type véhicule"
                 value={form.vehicleTypeId}
                 onChange={(v) => setForm({ ...form, vehicleTypeId: v })}
-                options={vehicleTypeOptions}
+                options={[
+                  { value: "", label: "— Choisir un type —" },
+                  ...scopedVehicleTypeOptions,
+                ]}
               />
+              {scopedServiceOptions.length === 0 || scopedVehicleTypeOptions.length === 0 ? (
+                <p className="text-xs text-danger">
+                  Aucun service ou type pour cette portée : créez-les d&apos;abord (onglets Services
+                  / Types véhicules) ou changez la portée.
+                </p>
+              ) : null}
               <Input
                 label="Prix (FCFA)"
                 type="number"

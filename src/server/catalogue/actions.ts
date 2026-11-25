@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { appError, type AppError } from "@/lib/errors";
 import { newEntityId } from "@/lib/ids";
+import { cleanOptionalString } from "@/lib/sanitize-server-action";
 import { catalogKindFromEntityKey } from "@/lib/catalogue-routes";
 import { canDirectPush, isPlatformUser, requireSessionForAction } from "@/server/auth/guards";
 import { resolveMutationSiteId } from "@/server/auth/site-scope";
@@ -49,15 +50,28 @@ export async function saveCatalogItemAction(raw: unknown): Promise<Result> {
   if (!parsed.success) {
     return { ok: false, error: appError("VALIDATION", parsed.error.issues[0]?.message ?? "Invalide") };
   }
+  const input = {
+    ...parsed.data,
+    id: cleanOptionalString(parsed.data.id),
+    createdAt: cleanOptionalString(parsed.data.createdAt),
+    name: cleanOptionalString(parsed.data.name),
+    description: cleanOptionalString(parsed.data.description),
+    categoryId: cleanOptionalString(parsed.data.categoryId),
+    serviceCategoryId: cleanOptionalString(parsed.data.serviceCategoryId),
+    serviceId: cleanOptionalString(parsed.data.serviceId),
+    vehicleTypeId: cleanOptionalString(parsed.data.vehicleTypeId),
+    lavSiteId: cleanOptionalString(parsed.data.lavSiteId),
+  };
   let siteId: string | null;
   if (isPlatformUser(session)) {
-    const raw = parsed.data.lavSiteId?.trim();
-    if (raw === "" || raw === "universal") {
+    const scope = input.lavSiteId?.trim();
+    if (!scope || scope === "universal") {
       siteId = null;
-    } else if (raw) {
-      siteId = raw;
     } else {
-      siteId = resolveMutationSiteId(session, parsed.data.lavSiteId);
+      siteId = scope;
+    }
+    if (!siteId && scope !== "universal") {
+      siteId = resolveMutationSiteId(session, input.lavSiteId);
     }
   } else {
     const scoped = resolveMutationSiteId(session);
@@ -66,48 +80,48 @@ export async function saveCatalogItemAction(raw: unknown): Promise<Result> {
     }
     siteId = scoped;
   }
-  const type = parsed.data.entityType as EntityKey;
-  const id = parsed.data.id ?? newEntityId(type.slice(0, 4));
+  const type = input.entityType as EntityKey;
+  const id = input.id ?? newEntityId(type.slice(0, 4));
   const now = new Date().toISOString();
   const payload: Record<string, unknown> = {
     id,
     lavSiteId: siteId ?? null,
-    isActive: parsed.data.isActive ?? true,
-    createdAt: parsed.data.id && parsed.data.createdAt ? parsed.data.createdAt : now,
+    isActive: input.isActive ?? true,
+    createdAt: input.id && input.createdAt ? input.createdAt : now,
     updatedAt: now,
   };
 
   if (type === "pricing") {
-    if (!parsed.data.serviceId || !parsed.data.vehicleTypeId || parsed.data.price == null) {
+    if (!input.serviceId || !input.vehicleTypeId || input.price == null) {
       return { ok: false, error: appError("VALIDATION", "Service, type véhicule et prix requis.") };
     }
-    payload.name = parsed.data.name || "Tarif";
-    payload.serviceId = parsed.data.serviceId;
-    payload.vehicleTypeId = parsed.data.vehicleTypeId;
-    payload.price = parsed.data.price;
+    payload.name = input.name || "Tarif";
+    payload.serviceId = input.serviceId;
+    payload.vehicleTypeId = input.vehicleTypeId;
+    payload.price = input.price;
     payload.estimatedDurationMinutes = 30;
     payload.validFrom = now;
   } else if (type === "vehicle_types") {
-    if (!parsed.data.name?.trim()) {
+    if (!input.name?.trim()) {
       return { ok: false, error: appError("VALIDATION", "Nom requis.") };
     }
-    payload.name = parsed.data.name.trim();
-    payload.description = parsed.data.description ?? "";
-    payload.categoryId = parsed.data.categoryId ?? null;
+    payload.name = input.name.trim();
+    payload.description = input.description ?? "";
+    payload.categoryId = input.categoryId ?? null;
   } else if (type === "services") {
-    if (!parsed.data.name?.trim()) {
+    if (!input.name?.trim()) {
       return { ok: false, error: appError("VALIDATION", "Nom requis.") };
     }
-    payload.name = parsed.data.name.trim();
-    payload.description = parsed.data.description ?? "";
-    payload.type = parsed.data.serviceCategoryId ?? parsed.data.categoryId ?? "standard";
+    payload.name = input.name.trim();
+    payload.description = input.description ?? "";
+    payload.type = input.serviceCategoryId ?? input.categoryId ?? "standard";
     payload.estimatedDurationMinutes = 30;
   } else {
-    if (!parsed.data.name?.trim()) {
+    if (!input.name?.trim()) {
       return { ok: false, error: appError("VALIDATION", "Nom requis.") };
     }
-    payload.name = parsed.data.name.trim();
-    payload.description = parsed.data.description ?? "";
+    payload.name = input.name.trim();
+    payload.description = input.description ?? "";
   }
 
   try {
