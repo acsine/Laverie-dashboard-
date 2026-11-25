@@ -67,9 +67,13 @@ async function loginViaPrisma(email: string, password: string): Promise<AuthResu
     const { ok, needsRehash } = await verifyPassword(password, user.passwordHash);
     if (!ok) {
       await recordAttempt(email, false);
+      const hint =
+        email === "superadmin@laverie.com"
+          ? "Super admin : utilisez le mot de passe admin123, ou réexécutez scripts/seed-superadmin.sql dans Supabase."
+          : "E-mail ou mot de passe incorrect.";
       return {
         ok: false,
-        error: appError("INVALID_CREDENTIALS", "E-mail ou mot de passe incorrect."),
+        error: appError("INVALID_CREDENTIALS", hint),
       };
     }
 
