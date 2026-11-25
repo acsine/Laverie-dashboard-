@@ -194,9 +194,9 @@ export function EmployeesPage({
   function confirmDelete(row: EmployeeRow) {
     confirm(
       {
-        title: "Archiver l'employé",
-        description: `Archiver ${row.firstName} ${row.lastName} ?\n\nSuppression logique : le compte disparaît de l’app ; dans Supabase, vérifiez deleted_at et is_active.`,
-        confirmLabel: "Archiver",
+        title: "Supprimer l'employé",
+        description: `Supprimer définitivement ${row.firstName} ${row.lastName} ?\n\nImpossible si cet employé est assigné à des commandes.`,
+        confirmLabel: "Supprimer",
       },
       () => {
         setDeletingId(row.id);
@@ -207,7 +207,7 @@ export function EmployeesPage({
               toast(res.error.message, "danger");
               return;
             }
-            toast("Employé archivé (suppression logique)", "success");
+            toast("Employé supprimé", "success");
             router.refresh();
           } finally {
             setDeletingId(null);

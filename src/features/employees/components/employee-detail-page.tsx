@@ -62,9 +62,9 @@ export function EmployeeDetailPage({
   function onDelete() {
     confirm(
       {
-        title: "Archiver l'employé",
-        description: `Archiver ${fullName} ?\n\nSuppression logique (deleted_at + compte inactif dans Supabase).`,
-        confirmLabel: "Archiver",
+        title: "Supprimer l'employé",
+        description: `Supprimer définitivement ${fullName} ?\n\nImpossible si cet employé est assigné à des commandes.`,
+        confirmLabel: "Supprimer",
       },
       () => {
         startTransition(async () => {
@@ -73,7 +73,7 @@ export function EmployeeDetailPage({
             toast(res.error.message, "danger");
             return;
           }
-          toast("Employé archivé (suppression logique)", "success");
+          toast("Employé supprimé", "success");
           router.push(listHref);
           router.refresh();
         });

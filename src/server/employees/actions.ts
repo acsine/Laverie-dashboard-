@@ -10,7 +10,12 @@ import { employeeCloudPayloadFromRaw } from "@/server/employees/build-employee-p
 import { canMutateCloud, isPlatformUser, requireSessionForAction } from "@/server/auth/guards";
 import { resolveMutationSiteId } from "@/server/auth/site-scope";
 import { normalizePhoneNumber } from "@/lib/phone";
-import { hashPasswordEdge, softDeleteEntityCloud, upsertEntityCloud } from "@/server/cloud/entity-sync";
+import {
+  deleteEntityCloud,
+  hashPasswordEdge,
+  upsertEntityCloud,
+} from "@/server/cloud/entity-sync";
+import { ordersUseEmployee } from "@/server/catalogue/delete-guards";
 
 const schema = z
   .object({
@@ -185,9 +190,15 @@ export async function deleteEmployeeAction(employeeId: string): Promise<Result> 
   if (!raw) {
     return { ok: false, error: appError("NOT_FOUND", "Employé introuvable.") };
   }
+  if (ordersUseEmployee(entities, employeeId)) {
+    return {
+      ok: false,
+      error: appError("DELETE", "Impossible : cet employé est lié à des commandes."),
+    };
+  }
   const siteId = String(raw.lavSiteId ?? raw.lav_site_id ?? "");
   try {
-    await softDeleteEntityCloud("employees", employeeId, {
+    await deleteEntityCloud("employees", employeeId, {
       id: employeeId,
       ...(siteId ? { lavSiteId: siteId } : {}),
     });

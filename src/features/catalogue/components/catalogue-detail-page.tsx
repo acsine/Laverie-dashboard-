@@ -7,6 +7,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { Breadcrumbs, Button, toast } from "@/components/ui";
 import { useConfirm } from "@/hooks/use-confirm";
 import { CATALOG_KINDS, type CatalogKind } from "@/lib/catalogue-routes";
+import { catalogDeleteConfirmDescription } from "@/server/catalogue/delete-guards";
 import { deleteCatalogItemAction } from "@/server/catalogue/actions";
 import type { CatalogKpiPack } from "@/server/catalogue/get-catalogue-kpis";
 import type { CatalogRow } from "@/server/catalogue/map-catalogue";
@@ -45,9 +46,9 @@ export function CatalogueDetailPage({
   function onDelete() {
     confirm(
       {
-        title: "Archiver",
-        description: `Archiver « ${item.name} » ?`,
-        confirmLabel: "Archiver",
+        title: "Supprimer",
+        description: catalogDeleteConfirmDescription(kind, item.name),
+        confirmLabel: "Supprimer",
       },
       () => {
         startTransition(async () => {
@@ -56,7 +57,7 @@ export function CatalogueDetailPage({
             toast(res.error.message, "danger");
             return;
           }
-          toast("Élément archivé", "success");
+          toast("Élément supprimé", "success");
           router.push(listHref);
           router.refresh();
         });

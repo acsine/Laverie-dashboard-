@@ -7,6 +7,7 @@ import { newEntityId } from "@/lib/ids";
 import { canDirectPush, isPlatformUser, requireSessionForAction } from "@/server/auth/guards";
 import { resolveMutationSiteId } from "@/server/auth/site-scope";
 import { normalizePhoneNumber } from "@/lib/phone";
+import { ordersUseClientVehicle } from "@/server/catalogue/delete-guards";
 import { deleteEntityCloud, upsertEntityCloud } from "@/server/cloud/entity-sync";
 
 const vehicleEntrySchema = z.object({
@@ -172,6 +173,14 @@ export async function deleteVehicleAction(vehicleId: string, customerId: string)
   if (!session) return { ok: false, error: appError("NO_SESSION", "Session expirée.") };
   if (!canDirectPush(session)) {
     return { ok: false, error: appError("FORBIDDEN", "Réservé administrateur.") };
+  }
+  const { loadWorkspaceEntities } = await import("@/server/entities/load-entities");
+  const { entities } = await loadWorkspaceEntities(session);
+  if (ordersUseClientVehicle(entities, vehicleId)) {
+    return {
+      ok: false,
+      error: appError("DELETE", "Impossible : ce véhicule a des commandes."),
+    };
   }
   try {
     await deleteEntityCloud("vehicles", vehicleId, { id: vehicleId });

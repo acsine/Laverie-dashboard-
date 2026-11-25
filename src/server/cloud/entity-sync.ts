@@ -164,7 +164,7 @@ export async function upsertEntityCloud(
   await pushCloudChanges([toPushChange(entityType, payload, "UPSERT")]);
 }
 
-/** Hard delete fidélité globale ; sinon soft delete cloud (`deleted_at`, `is_active` pour employés/clients). */
+/** DELETE cloud : hard delete catalogue + employés (sync-api) ; soft delete clients / véhicules clients. */
 export async function deleteEntityCloud(
   entityType: string,
   id: string,

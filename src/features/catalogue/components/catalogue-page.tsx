@@ -26,6 +26,7 @@ import {
 } from "@/lib/catalogue-routes";
 import type { Column, TabItem } from "@/components/ui";
 import type { CatalogRow } from "@/server/catalogue/map-catalogue";
+import { catalogDeleteConfirmDescription } from "@/server/catalogue/delete-guards";
 import { deleteCatalogItemAction, saveCatalogItemAction } from "@/server/catalogue/actions";
 import type { EntityKey } from "@/server/cloud/entity-sync";
 import { useConfirm } from "@/hooks/use-confirm";
@@ -185,9 +186,9 @@ export function CataloguePage({
   function confirmDelete(row: CatalogRow) {
     confirm(
       {
-        title: "Archiver",
-        description: `Archiver « ${row.name} » ?`,
-        confirmLabel: "Archiver",
+        title: "Supprimer",
+        description: catalogDeleteConfirmDescription(row.kind, row.name),
+        confirmLabel: "Supprimer",
       },
       () => {
         setDeletingId(row.id);
@@ -198,7 +199,7 @@ export function CataloguePage({
               toast(res.error.message, "danger");
               return;
             }
-            toast("Élément archivé", "success");
+            toast("Élément supprimé", "success");
             router.refresh();
           } finally {
             setDeletingId(null);

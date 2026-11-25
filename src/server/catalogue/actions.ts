@@ -8,7 +8,13 @@ import { catalogKindFromEntityKey } from "@/lib/catalogue-routes";
 import { canDirectPush, isPlatformUser, requireSessionForAction } from "@/server/auth/guards";
 import { resolveMutationSiteId } from "@/server/auth/site-scope";
 import type { EntityKey } from "@/server/cloud/entity-sync";
-import { softDeleteEntityCloud, upsertEntityCloud } from "@/server/cloud/entity-sync";
+import { deleteEntityCloud, upsertEntityCloud } from "@/server/cloud/entity-sync";
+import {
+  ordersUseService,
+  ordersUseVehicleType,
+  serviceIdsInCategory,
+  vehicleTypeIdsInCategory,
+} from "@/server/catalogue/delete-guards";
 
 const nameSchema = z.object({
   id: z.string().optional(),
@@ -135,8 +141,52 @@ export async function deleteCatalogItemAction(
   }
   const siteId = String(raw.lavSiteId ?? raw.lav_site_id ?? "");
 
+  if (entityType === "services" && ordersUseService(entities, itemId)) {
+    return {
+      ok: false,
+      error: appError("DELETE", "Impossible : ce service a déjà été utilisé sur une commande."),
+    };
+  }
+  if (entityType === "vehicle_types" && ordersUseVehicleType(entities, itemId)) {
+    return {
+      ok: false,
+      error: appError(
+        "DELETE",
+        "Impossible : ce type de véhicule a déjà été utilisé sur une commande.",
+      ),
+    };
+  }
+  if (entityType === "service_categories") {
+    const blocked = serviceIdsInCategory(entities, itemId).some((sid) =>
+      ordersUseService(entities, sid),
+    );
+    if (blocked) {
+      return {
+        ok: false,
+        error: appError(
+          "DELETE",
+          "Impossible : une commande utilise un service de cette catégorie.",
+        ),
+      };
+    }
+  }
+  if (entityType === "vehicle_categories") {
+    const blocked = vehicleTypeIdsInCategory(entities, itemId).some((tid) =>
+      ordersUseVehicleType(entities, tid),
+    );
+    if (blocked) {
+      return {
+        ok: false,
+        error: appError(
+          "DELETE",
+          "Impossible : une commande utilise un type de cette catégorie.",
+        ),
+      };
+    }
+  }
+
   try {
-    await softDeleteEntityCloud(entityType, itemId, {
+    await deleteEntityCloud(entityType, itemId, {
       id: itemId,
       ...(siteId ? { lavSiteId: siteId } : {}),
     });
